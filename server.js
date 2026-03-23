@@ -82,7 +82,6 @@
 
 
 
-
 require('dotenv').config();
 const express   = require('express');
 const http      = require('http');
@@ -101,20 +100,34 @@ const socketHandler     = require('./socket/socketHandler');
 const app    = express();
 const server = http.createServer(app);
 
+// ── Allowed Origins (FIXED CORS 🔥) ────────────────────────
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  process.env.CLIENT_URL
+];
+
 // ── Socket.IO setup ────────────────────────────────────────
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
 // ── Middleware ─────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -145,6 +158,11 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// ── Root route (optional but useful) ───────────────────────
+app.get('/', (_req, res) => {
+  res.send('🚀 IPL Fantasy Backend is LIVE');
+});
+
 // ── 404 handler ────────────────────────────────────────────
 app.use('*', (_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
@@ -158,7 +176,7 @@ const startServer = (port) => {
   const serverInstance = server.listen(port, () => {
     console.log(`🚀 Server running on http://localhost:${port}`);
     console.log(`📡 Socket.IO ready`);
-    console.log(`🌐 CORS allowed for: ${process.env.CLIENT_URL}`);
+    console.log(`🌐 Allowed origins:`, allowedOrigins);
   });
 
   serverInstance.on("error", (err) => {
