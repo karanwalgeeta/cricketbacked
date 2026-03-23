@@ -203,7 +203,7 @@ router.get('/live', async (req, res) => {
   try {
     const response = await axios.get(`${BASE_URL}/fixtures`, {
       params: {
-        api_token: process.env.SPORTMONKS_API_KEY,
+        api_token: process.env.CRIC_API_KEY,
         include: "localteam,visitorteam,venue,league"
       }
     });
