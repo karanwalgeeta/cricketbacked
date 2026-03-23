@@ -379,9 +379,9 @@ router.get('/live', async (req, res) => {
     let matches = [...liveMatches, ...upcomingMatches];
 
     // 🔥 IPL FILTER (optional - remove if ALL matches chahiye)
-    matches = matches.filter(m =>
-      m?.name?.toLowerCase().includes("ipl")
-    );
+    // matches = matches.filter(m =>
+    //   m?.name?.toLowerCase().includes("ipl")
+    // );
 
     // 🔥 FORMAT DATA
     const formattedMatches = matches.map(m => ({
