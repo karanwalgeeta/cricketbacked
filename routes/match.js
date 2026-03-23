@@ -197,7 +197,7 @@ const BASE_URL = "https://api.sportmonks.com/v3/cricket";
 
 
 // ══════════════════════════════════════════════════════════
-// GET /api/match/live  — IPL matches only (LIVE + UPCOMING)
+// GET /api/match/live  — IPL matches only
 // ══════════════════════════════════════════════════════════
 router.get('/live', async (req, res) => {
   try {
@@ -208,36 +208,35 @@ router.get('/live', async (req, res) => {
       }
     });
 
-    let matches = response.data.data || [];
+    let matches = response?.data?.data || [];
 
-    // 🔥 ONLY IPL FILTER
+    // 🔥 IPL FILTER SAFE
     matches = matches.filter(m =>
-      m.league?.name?.toLowerCase().includes("ipl")
+      m?.league?.name?.toLowerCase().includes("ipl")
     );
 
-    // 🔥 FORMAT CLEAN DATA
     const formattedMatches = matches.map(m => ({
-      matchId: m.id,
+      matchId: m?.id,
 
       team1: {
-        name: m.localteam?.name,
-        shortName: m.localteam?.code,
-        logo: m.localteam?.image_path,
+        name: m?.localteam?.name || "TBD",
+        shortName: m?.localteam?.code || "",
+        logo: m?.localteam?.image_path || "",
       },
 
       team2: {
-        name: m.visitorteam?.name,
-        shortName: m.visitorteam?.code,
-        logo: m.visitorteam?.image_path,
+        name: m?.visitorteam?.name || "TBD",
+        shortName: m?.visitorteam?.code || "",
+        logo: m?.visitorteam?.image_path || "",
       },
 
-      venue: m.venue?.name,
-      date: m.starting_at,
+      venue: m?.venue?.name || "Unknown",
+      date: m?.starting_at,
 
       status:
-        m.status === "Finished"
+        m?.status === "Finished"
           ? "completed"
-          : m.status === "Live"
+          : m?.status === "Live"
           ? "live"
           : "upcoming",
     }));
@@ -252,7 +251,7 @@ router.get('/live', async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch matches"
+      message: err.response?.data?.message || "Failed to fetch matches"
     });
   }
 });
@@ -263,8 +262,20 @@ router.get('/live', async (req, res) => {
 // ══════════════════════════════════════════════════════════
 router.get('/:matchId', async (req, res) => {
   try {
+    const matchId = req.params.matchId;
+
+    console.log("👉 MATCH ID:", matchId);
+
+    // ❌ undefined / null check
+    if (!matchId || matchId === "undefined") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid matchId"
+      });
+    }
+
     const response = await axios.get(
-      `${BASE_URL}/fixtures/${req.params.matchId}`,
+      `${BASE_URL}/fixtures/${matchId}`,
       {
         params: {
           api_token: process.env.SPORTMONKS_API_KEY,
@@ -273,8 +284,9 @@ router.get('/:matchId', async (req, res) => {
       }
     );
 
-    const m = response.data.data;
+    const m = response?.data?.data;
 
+    // ❌ match not found
     if (!m) {
       return res.status(404).json({
         success: false,
@@ -283,25 +295,31 @@ router.get('/:matchId', async (req, res) => {
     }
 
     const match = {
-      matchId: m.id,
+      matchId: m?.id,
 
       team1: {
-        name: m.localteam?.name,
-        shortName: m.localteam?.code,
-        logo: m.localteam?.image_path,
+        name: m?.localteam?.name || "TBD",
+        shortName: m?.localteam?.code || "",
+        logo: m?.localteam?.image_path || "",
       },
 
       team2: {
-        name: m.visitorteam?.name,
-        shortName: m.visitorteam?.code,
-        logo: m.visitorteam?.image_path,
+        name: m?.visitorteam?.name || "TBD",
+        shortName: m?.visitorteam?.code || "",
+        logo: m?.visitorteam?.image_path || "",
       },
 
-      venue: m.venue?.name,
-      date: m.starting_at,
+      venue: m?.venue?.name || "Unknown",
+      date: m?.starting_at,
 
-      status: m.status,
-      runs: m.runs || [],
+      status:
+        m?.status === "Finished"
+          ? "completed"
+          : m?.status === "Live"
+          ? "live"
+          : "upcoming",
+
+      runs: m?.runs || [],
     };
 
     res.json({
@@ -314,7 +332,7 @@ router.get('/:matchId', async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Error fetching match"
+      message: err.response?.data?.message || "Error fetching match"
     });
   }
 });
