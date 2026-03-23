@@ -193,8 +193,11 @@ const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 
-const BASE_URL = "https://api.sportmonks.com/v3/cricket";
+// const BASE_URL = "https://api.sportmonks.com/v3/cricket";
 
+const BASE_URL = "https://api.cricapi.com/v1";
+ 
+ 
 
 // ══════════════════════════════════════════════════════════
 // GET /api/match/live  — IPL matches only
@@ -278,7 +281,7 @@ router.get('/:matchId', async (req, res) => {
       `${BASE_URL}/fixtures/${matchId}`,
       {
         params: {
-          api_token: process.env.SPORTMONKS_API_KEY,
+          api_token: process.env.CRIC_API_KEY,
           include: "localteam,visitorteam,venue,league,runs"
         }
       }
