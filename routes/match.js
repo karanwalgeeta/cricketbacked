@@ -189,63 +189,230 @@
 
 
 
+// const express = require('express');
+// const router  = express.Router();
+// const axios   = require('axios');
+
+// // const BASE_URL = "https://api.sportmonks.com/v3/cricket";
+
+// const BASE_URL = "https://api.cricapi.com/v1";
+ 
+ 
+
+// // ══════════════════════════════════════════════════════════
+// // GET /api/match/live  — IPL matches only
+// // ══════════════════════════════════════════════════════════
+// router.get('/live', async (req, res) => {
+//   try {
+//     const response = await axios.get(`${BASE_URL}/fixtures`, {
+//       params: {
+//         api_token: process.env.CRIC_API_KEY,
+//         include: "localteam,visitorteam,venue,league"
+//       }
+//     });
+
+//     let matches = response?.data?.data || [];
+
+//     // 🔥 IPL FILTER SAFE
+//     matches = matches.filter(m =>
+//       m?.league?.name?.toLowerCase().includes("ipl")
+//     );
+
+//     const formattedMatches = matches.map(m => ({
+//       matchId: m?.id,
+
+//       team1: {
+//         name: m?.localteam?.name || "TBD",
+//         shortName: m?.localteam?.code || "",
+//         logo: m?.localteam?.image_path || "",
+//       },
+
+//       team2: {
+//         name: m?.visitorteam?.name || "TBD",
+//         shortName: m?.visitorteam?.code || "",
+//         logo: m?.visitorteam?.image_path || "",
+//       },
+
+//       venue: m?.venue?.name || "Unknown",
+//       date: m?.starting_at,
+
+//       status:
+//         m?.status === "Finished"
+//           ? "completed"
+//           : m?.status === "Live"
+//           ? "live"
+//           : "upcoming",
+//     }));
+
+//     res.json({
+//       success: true,
+//       matches: formattedMatches
+//     });
+
+//   } catch (err) {
+//     console.error("🔥 MATCH ERROR:", err.response?.data || err.message);
+
+//     res.status(500).json({
+//       success: false,
+//       message: err.response?.data?.message || "Failed to fetch matches"
+//     });
+//   }
+// });
+
+
+// // ══════════════════════════════════════════════════════════
+// // GET /api/match/:matchId — single match detail
+// // ══════════════════════════════════════════════════════════
+// router.get('/:matchId', async (req, res) => {
+//   try {
+//     const matchId = req.params.matchId;
+
+//     console.log("👉 MATCH ID:", matchId);
+
+//     // ❌ undefined / null check
+//     if (!matchId || matchId === "undefined") {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid matchId"
+//       });
+//     }
+
+//     const response = await axios.get(
+//       `${BASE_URL}/fixtures/${matchId}`,
+//       {
+//         params: {
+//           api_token: process.env.CRIC_API_KEY,
+//           include: "localteam,visitorteam,venue,league,runs"
+//         }
+//       }
+//     );
+
+//     const m = response?.data?.data;
+
+//     // ❌ match not found
+//     if (!m) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Match not found"
+//       });
+//     }
+
+//     const match = {
+//       matchId: m?.id,
+
+//       team1: {
+//         name: m?.localteam?.name || "TBD",
+//         shortName: m?.localteam?.code || "",
+//         logo: m?.localteam?.image_path || "",
+//       },
+
+//       team2: {
+//         name: m?.visitorteam?.name || "TBD",
+//         shortName: m?.visitorteam?.code || "",
+//         logo: m?.visitorteam?.image_path || "",
+//       },
+
+//       venue: m?.venue?.name || "Unknown",
+//       date: m?.starting_at,
+
+//       status:
+//         m?.status === "Finished"
+//           ? "completed"
+//           : m?.status === "Live"
+//           ? "live"
+//           : "upcoming",
+
+//       runs: m?.runs || [],
+//     };
+
+//     res.json({
+//       success: true,
+//       match
+//     });
+
+//   } catch (err) {
+//     console.error("🔥 MATCH DETAIL ERROR:", err.response?.data || err.message);
+
+//     res.status(500).json({
+//       success: false,
+//       message: err.response?.data?.message || "Error fetching match"
+//     });
+//   }
+// });
+
+// module.exports = router;
+
+
+
+
+
+
+
+
+
+
 const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 
-// const BASE_URL = "https://api.sportmonks.com/v3/cricket";
-
 const BASE_URL = "https://api.cricapi.com/v1";
- 
- 
 
 // ══════════════════════════════════════════════════════════
-// GET /api/match/live  — IPL matches only
+// GET /api/match/live  — ALL matches (LIVE + UPCOMING + IPL)
 // ══════════════════════════════════════════════════════════
 router.get('/live', async (req, res) => {
   try {
-    const response = await axios.get(`${BASE_URL}/fixtures`, {
-      params: {
-        api_token: process.env.CRIC_API_KEY,
-        include: "localteam,visitorteam,venue,league"
-      }
-    });
+    // 🔥 2 APIs call karo
+    const [liveRes, upcomingRes] = await Promise.all([
+      axios.get(`${BASE_URL}/currentMatches`, {
+        params: { apikey: process.env.CRIC_API_KEY }
+      }),
+      axios.get(`${BASE_URL}/matches`, {
+        params: { apikey: process.env.CRIC_API_KEY }
+      })
+    ]);
 
-    let matches = response?.data?.data || [];
+    const liveMatches = liveRes?.data?.data || [];
+    const upcomingMatches = upcomingRes?.data?.data || [];
 
-    // 🔥 IPL FILTER SAFE
+    // 🔥 combine both
+    let matches = [...liveMatches, ...upcomingMatches];
+
+    // 🔥 IPL FILTER (optional - remove if ALL matches chahiye)
     matches = matches.filter(m =>
-      m?.league?.name?.toLowerCase().includes("ipl")
+      m?.name?.toLowerCase().includes("ipl")
     );
 
+    // 🔥 FORMAT DATA
     const formattedMatches = matches.map(m => ({
       matchId: m?.id,
 
       team1: {
-        name: m?.localteam?.name || "TBD",
-        shortName: m?.localteam?.code || "",
-        logo: m?.localteam?.image_path || "",
+        name: m?.teams?.[0] || "TBD",
+        shortName: m?.teams?.[0]?.slice(0, 3) || "",
+        logo: "",
       },
 
       team2: {
-        name: m?.visitorteam?.name || "TBD",
-        shortName: m?.visitorteam?.code || "",
-        logo: m?.visitorteam?.image_path || "",
+        name: m?.teams?.[1] || "TBD",
+        shortName: m?.teams?.[1]?.slice(0, 3) || "",
+        logo: "",
       },
 
-      venue: m?.venue?.name || "Unknown",
-      date: m?.starting_at,
+      venue: m?.venue || "Unknown",
+      date: m?.dateTimeGMT,
 
       status:
-        m?.status === "Finished"
+        m?.status === "completed"
           ? "completed"
-          : m?.status === "Live"
+          : m?.status === "live"
           ? "live"
           : "upcoming",
     }));
 
     res.json({
       success: true,
+      total: formattedMatches.length,
       matches: formattedMatches
     });
 
@@ -267,9 +434,6 @@ router.get('/:matchId', async (req, res) => {
   try {
     const matchId = req.params.matchId;
 
-    console.log("👉 MATCH ID:", matchId);
-
-    // ❌ undefined / null check
     if (!matchId || matchId === "undefined") {
       return res.status(400).json({
         success: false,
@@ -277,19 +441,15 @@ router.get('/:matchId', async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      `${BASE_URL}/fixtures/${matchId}`,
-      {
-        params: {
-          api_token: process.env.CRIC_API_KEY,
-          include: "localteam,visitorteam,venue,league,runs"
-        }
+    const response = await axios.get(`${BASE_URL}/match_info`, {
+      params: {
+        apikey: process.env.CRIC_API_KEY,
+        id: matchId
       }
-    );
+    });
 
     const m = response?.data?.data;
 
-    // ❌ match not found
     if (!m) {
       return res.status(404).json({
         success: false,
@@ -301,28 +461,16 @@ router.get('/:matchId', async (req, res) => {
       matchId: m?.id,
 
       team1: {
-        name: m?.localteam?.name || "TBD",
-        shortName: m?.localteam?.code || "",
-        logo: m?.localteam?.image_path || "",
+        name: m?.teams?.[0] || "TBD",
       },
 
       team2: {
-        name: m?.visitorteam?.name || "TBD",
-        shortName: m?.visitorteam?.code || "",
-        logo: m?.visitorteam?.image_path || "",
+        name: m?.teams?.[1] || "TBD",
       },
 
-      venue: m?.venue?.name || "Unknown",
-      date: m?.starting_at,
-
-      status:
-        m?.status === "Finished"
-          ? "completed"
-          : m?.status === "Live"
-          ? "live"
-          : "upcoming",
-
-      runs: m?.runs || [],
+      venue: m?.venue || "Unknown",
+      date: m?.dateTimeGMT,
+      status: m?.status,
     };
 
     res.json({
