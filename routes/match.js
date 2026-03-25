@@ -1,50 +1,51 @@
 
+
 const express = require('express');
 const router  = express.Router();
 const axios   = require('axios');
 
 const BASE_URL = "https://api.cricapi.com/v1";
 
-// 🔹 IPL & PSL series IDs (replace with correct IDs from your API)
-const IPL_SERIES_ID = "1234"; // Example: IPL
-const PSL_SERIES_ID = "5678"; // Example: PSL
-
 // ══════════════════════════════════════════════════════════
-// GET /api/match/live — LIVE + UPCOMING matches for IPL & PSL
+// GET /api/match/live  — ALL matches (LIVE + UPCOMING + IPL)
 // ══════════════════════════════════════════════════════════
 router.get('/live', async (req, res) => {
   try {
-    // 🔥 fetch live & upcoming matches for IPL + PSL
-    const [liveIPL, upcomingIPL, livePSL, upcomingPSL] = await Promise.all([
-      axios.get(`${BASE_URL}/matches`, { params: { apikey: process.env.CRIC_API_KEY, series_id: IPL_SERIES_ID, status: 'live' } }),
-      axios.get(`${BASE_URL}/matches`, { params: { apikey: process.env.CRIC_API_KEY, series_id: IPL_SERIES_ID, status: 'upcoming' } }),
-      axios.get(`${BASE_URL}/matches`, { params: { apikey: process.env.CRIC_API_KEY, series_id: PSL_SERIES_ID, status: 'live' } }),
-      axios.get(`${BASE_URL}/matches`, { params: { apikey: process.env.CRIC_API_KEY, series_id: PSL_SERIES_ID, status: 'upcoming' } }),
+    // 🔥 2 APIs call karo
+    const [liveRes, upcomingRes] = await Promise.all([
+      axios.get(`${BASE_URL}/currentMatches`, {
+        params: { apikey: process.env.CRIC_API_KEY }
+      }),
+      axios.get(`${BASE_URL}/matches`, {
+        params: { apikey: process.env.CRIC_API_KEY }
+      })
     ]);
 
-    // combine all matches
-    let matches = [
-      ...liveIPL.data.data, 
-      ...upcomingIPL.data.data, 
-      ...livePSL.data.data, 
-      ...upcomingPSL.data.data
-    ];
+    const liveMatches = liveRes?.data?.data || [];
+    const upcomingMatches = upcomingRes?.data?.data || [];
 
-    // format matches
+    // 🔥 combine both
+    let matches = [...liveMatches, ...upcomingMatches];
+
+    // 🔥 IPL FILTER (optional - remove if ALL matches chahiye)
+    // matches = matches.filter(m =>
+    //   m?.name?.toLowerCase().includes("ipl")
+    // );
+
+    // 🔥 FORMAT DATA
     const formattedMatches = matches.map(m => ({
       matchId: m?.id,
-      series: m?.series?.name || "Unknown",
 
       team1: {
-        name: m?.teams?.[0]?.name || "TBD",
-        shortName: m?.teams?.[0]?.name?.slice(0, 3) || "",
-        logo: m?.teams?.[0]?.logo || "",
+        name: m?.teams?.[0] || "TBD",
+        shortName: m?.teams?.[0]?.slice(0, 3) || "",
+        logo: "",
       },
 
       team2: {
-        name: m?.teams?.[1]?.name || "TBD",
-        shortName: m?.teams?.[1]?.name?.slice(0, 3) || "",
-        logo: m?.teams?.[1]?.logo || "",
+        name: m?.teams?.[1] || "TBD",
+        shortName: m?.teams?.[1]?.slice(0, 3) || "",
+        logo: "",
       },
 
       venue: m?.venue || "Unknown",
@@ -73,6 +74,7 @@ router.get('/live', async (req, res) => {
     });
   }
 });
+
 
 // ══════════════════════════════════════════════════════════
 // GET /api/match/:matchId — single match detail
@@ -106,16 +108,13 @@ router.get('/:matchId', async (req, res) => {
 
     const match = {
       matchId: m?.id,
-      series: m?.series?.name || "Unknown",
 
       team1: {
-        name: m?.teams?.[0]?.name || "TBD",
-        logo: m?.teams?.[0]?.logo || "",
+        name: m?.teams?.[0] || "TBD",
       },
 
       team2: {
-        name: m?.teams?.[1]?.name || "TBD",
-        logo: m?.teams?.[1]?.logo || "",
+        name: m?.teams?.[1] || "TBD",
       },
 
       venue: m?.venue || "Unknown",
