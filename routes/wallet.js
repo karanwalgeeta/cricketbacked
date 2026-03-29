@@ -1,5 +1,4 @@
 
-
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -57,6 +56,62 @@ router.post('/add-wallet', auth, async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
+
+
+
+// // ═══════════════════════════════════════════════
+// // 📜 USER TRANSACTIONS
+// // ═══════════════════════════════════════════════
+
+
+// router.get('/transactions', auth, async (req, res) => {
+//   try {
+//     const transactions = await Transaction.find({ userId: req.user._id })
+//       .sort({ createdAt: -1 });
+
+//     res.json({
+//       success: true,
+//       transactions,
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ success: false });
+//   }
+// });
+
+
+
+router.get('/transactions', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 20;
+    const skip = (page - 1) * limit;
+
+    const transactions = await Transaction.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Transaction.countDocuments({ userId: req.user._id });
+
+    res.json({
+      success: true,
+      transactions,
+      pagination: {
+        page,
+        total,
+        pages: Math.ceil(total / limit),
+        hasMore: skip + transactions.length < total,
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
+});
+
 
 // ═══════════════════════════════════════════════
 // 📥 GET USER WALLETS
@@ -164,467 +219,6 @@ const verifyTRC20 = async (txHash) => {
 // ═══════════════════════════════════════════════
 // 🔍 VERIFY BEP20 (basic)
 // ═══════════════════════════════════════════════
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const txs = res.data.result;
-
-//     if (!txs || txs.length === 0) {
-//       return { success: false };
-//     }
-
-//     const tx = txs.find(
-//       (t) =>
-//         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase() &&
-//         t.contractAddress.toLowerCase() === BEP20_ADDRESS.toLowerCase()
-//     );
-
-//     if (!tx) return { success: false };
-
-//     return {
-//       success: true,
-//       amount: Number(tx.value) / 1e18,
-//       to: tx.to,
-//       from: tx.from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const txs = res.data.result;
-
-//     if (!txs || txs.length === 0) {
-//       return { success: false };
-//     }
-
-//     const tx = txs.find(
-//       (t) =>
-//         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase() &&
-//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!tx) return { success: false };
-
-//     return {
-//       success: true,
-//       amount: Number(tx.value) / 1e18,
-//       to: tx.to,
-//       from: tx.from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const receipt = res.data.result;
-
-//     if (!receipt) return { success: false };
-
-//     // ✅ check status
-//     if (receipt.status !== "0x1") {
-//       return { success: false };
-//     }
-
-//     // 🔥 LOGS = token transfer details
-//     const logs = receipt.logs;
-
-//     if (!logs || logs.length === 0) {
-//       return { success: false };
-//     }
-
-//     // 👉 find USDT transfer
-//     const log = logs.find(
-//       (l) =>
-//         l.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!log) return { success: false };
-
-//     // 🔥 decode amount (data field hex → number)
-//     const amount = parseInt(log.data, 16) / 1e18;
-
-//     // 🔥 decode receiver address
-//     const to = "0x" + log.topics[2].slice(26);
-
-//     return {
-//       success: true,
-//       amount,
-//       to,
-//       from: "unknown"
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-
-//      console.log("TX HASH:", txHash); // ✅ yaha
-
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-   
-
-//     const receipt = res.data.result;
-
-//     console.log("RECEIPT:", receipt); 
-
-//     // ❌ no tx
-//     if (!receipt) {
-//       console.log("No receipt");
-//       return { success: false };
-//     }
-
-//     // ❌ failed tx
-//     if (receipt.status !== "0x1") {
-//       console.log("Tx failed");
-//       return { success: false };
-//     }
-
-//     const logs = receipt.logs;
-
-//     console.log("LOGS:", logs);
-
-//     if (!logs || logs.length === 0) {
-//       console.log("No logs");
-//       return { success: false };
-//     }
-
-//     // ✅ find USDT transfer log
-//     const log = logs.find(
-//       (l) =>
-//         l.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!log) {
-//       console.log("No USDT log found");
-//       return { success: false };
-//     }
-
-//     // 🔥 decode receiver address
-//     const to = "0x" + log.topics[2].slice(26);
-
-//     // 🔥 decode amount
-//     const amount = parseInt(log.data, 16) / 1e18;
-
-//     console.log("DETECTED:", { to, amount });
-
-//     return {
-//       success: true,
-//       amount,
-//       to,
-//       from: "unknown"
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-
-//      console.log("TX HASH:", txHash); // ✅ yaha
-//     // 1️⃣ Get transaction receipt
-//     const receiptRes = await axios.get(
-//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const receipt = receiptRes.data.result;
-
-//     if (!receipt || !receipt.logs) {
-//       console.log("No receipt/logs");
-//       return { success: false };
-//     }
-
-//     // 2️⃣ Decode logs
-//     const logs = receipt.logs;
-
-//     // USDT transfer topic (Transfer event)
-//     const transferTopic =
-//       "0xddf252ad00000000000000000000000000000000000000000000000000000000";
-
-//     const log = logs.find(
-//       (l) =>
-//         l.address.toLowerCase() === USDT_CONTRACT.toLowerCase() &&
-//         l.topics[0] === transferTopic
-//     );
-
-//     if (!log) {
-//       console.log("No USDT transfer log");
-//       return { success: false };
-//     }
-
-//     // 3️⃣ Extract addresses
-//     const to =
-//       "0x" + log.topics[2].slice(26); // receiver
-//     const from =
-//       "0x" + log.topics[1].slice(26); // sender
-
-//     // 4️⃣ Extract amount
-//     const amount = parseInt(log.data, 16) / 1e18;
-
-//     console.log("TO:", to);
-//     console.log("EXPECTED:", BEP20_ADDRESS);
-
-//     // 5️⃣ Match address
-//     if (to.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) {
-//       return { success: false };
-//     }
-
-//     return {
-//       success: true,
-//       amount,
-//       to,
-//       from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const txs = res.data.result;
-
-//     if (!txs || txs.length === 0) {
-//       return { success: false };
-//     }
-
-//     // 🔥 match by txHash
-//     const tx = txs.find(
-//       (t) =>
-//         t.hash.toLowerCase() === txHash.toLowerCase() &&
-//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!tx) {
-//       console.log("TX NOT FOUND IN LIST");
-//       return { success: false };
-//     }
-
-//     return {
-//       success: true,
-//       amount: Number(tx.value) / 1e18,
-//       to: tx.to,
-//       from: tx.from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     console.log("TX HASH:", txHash);
-
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const receipt = res.data.result;
-
-//     if (!receipt) {
-//       console.log("No receipt");
-//       return { success: false };
-//     }
-
-//     const logs = receipt.logs;
-
-//     if (!logs || logs.length === 0) {
-//       console.log("No logs");
-//       return { success: false };
-//     }
-
-//     console.log("LOGS:", logs);
-
-//     // 👉 USDT Transfer event signature
-//     const TRANSFER_TOPIC =
-//       "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb";
-
-//     for (let log of logs) {
-//       if (
-//         log.topics[0].toLowerCase().startsWith(TRANSFER_TOPIC) &&
-//         log.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//       ) {
-//         const to = "0x" + log.topics[2].slice(26);
-
-//         if (to.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) continue;
-
-//         const amount = parseInt(log.data, 16) / 1e18;
-
-//         return {
-//           success: true,
-//           amount,
-//           to,
-//           from: "decoded",
-//         };
-//       }
-//     }
-
-//     return { success: false };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     console.log("TX HASH:", txHash);
-
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     const txs = res.data.result;
-
-//     if (!txs || txs.length === 0) {
-//       console.log("No transactions found");
-//       return { success: false };
-//     }
-
-//     console.log("TOTAL TXS:", txs.length);
-
-//     // 👉 find matching txHash
-//     const tx = txs.find(
-//       (t) =>
-//         t.hash.toLowerCase() === txHash.toLowerCase() &&
-//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!tx) {
-//       console.log("TX NOT FOUND IN LIST");
-//       return { success: false };
-//     }
-
-//     console.log("MATCHED TX:", tx);
-
-//     return {
-//       success: true,
-//       amount: Number(tx.value) / 1e18,
-//       to: tx.to,
-//       from: tx.from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
-
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     console.log("TX HASH:", txHash);
-
-//     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
-//     );
-
-//     console.log("FULL RESPONSE:", res.data);
-
-//     // ❌ check API error
-//     if (res.data.status !== "1") {
-//       console.log("API ERROR:", res.data.message);
-//       return { success: false };
-//     }
-
-//     const txs = res.data.result;
-
-//     // ✅ ensure array
-//     if (!Array.isArray(txs)) {
-//       console.log("NOT ARRAY:", txs);
-//       return { success: false };
-//     }
-
-//     console.log("TOTAL TXS:", txs.length);
-
-//     const tx = txs.find(
-//       (t) =>
-//         t.hash.toLowerCase() === txHash.toLowerCase() &&
-//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
-//     );
-
-//     if (!tx) {
-//       console.log("TX NOT FOUND");
-//       return { success: false };
-//     }
-
-//     console.log("MATCHED TX:", tx);
-
-//     return {
-//       success: true,
-//       amount: Number(tx.value) / 1e18,
-//       to: tx.to,
-//       from: tx.from,
-//     };
-
-//   } catch (err) {
-//     console.log("BEP20 ERROR:", err.message);
-//     return { success: false };
-//   }
-// };
 
 
 
