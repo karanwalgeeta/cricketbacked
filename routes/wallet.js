@@ -467,61 +467,112 @@ const verifyTRC20 = async (txHash) => {
 
 
 
+// const verifyBEP20 = async (txHash) => {
+//   try {
+//     console.log("TX HASH:", txHash);
+
+//     const res = await axios.get(
+//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
+//     );
+
+//     const receipt = res.data.result;
+
+//     if (!receipt) {
+//       console.log("No receipt");
+//       return { success: false };
+//     }
+
+//     const logs = receipt.logs;
+
+//     if (!logs || logs.length === 0) {
+//       console.log("No logs");
+//       return { success: false };
+//     }
+
+//     console.log("LOGS:", logs);
+
+//     // 👉 USDT Transfer event signature
+//     const TRANSFER_TOPIC =
+//       "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb";
+
+//     for (let log of logs) {
+//       if (
+//         log.topics[0].toLowerCase().startsWith(TRANSFER_TOPIC) &&
+//         log.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
+//       ) {
+//         const to = "0x" + log.topics[2].slice(26);
+
+//         if (to.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) continue;
+
+//         const amount = parseInt(log.data, 16) / 1e18;
+
+//         return {
+//           success: true,
+//           amount,
+//           to,
+//           from: "decoded",
+//         };
+//       }
+//     }
+
+//     return { success: false };
+
+//   } catch (err) {
+//     console.log("BEP20 ERROR:", err.message);
+//     return { success: false };
+//   }
+// };
+
+
+
+
 const verifyBEP20 = async (txHash) => {
   try {
     console.log("TX HASH:", txHash);
 
     const res = await axios.get(
-      `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
+      `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
     );
 
-    const receipt = res.data.result;
+    const txs = res.data.result;
 
-    if (!receipt) {
-      console.log("No receipt");
+    if (!txs || txs.length === 0) {
+      console.log("No transactions found");
       return { success: false };
     }
 
-    const logs = receipt.logs;
+    console.log("TOTAL TXS:", txs.length);
 
-    if (!logs || logs.length === 0) {
-      console.log("No logs");
+    // 👉 find matching txHash
+    const tx = txs.find(
+      (t) =>
+        t.hash.toLowerCase() === txHash.toLowerCase() &&
+        t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
+    );
+
+    if (!tx) {
+      console.log("TX NOT FOUND IN LIST");
       return { success: false };
     }
 
-    console.log("LOGS:", logs);
+    console.log("MATCHED TX:", tx);
 
-    // 👉 USDT Transfer event signature
-    const TRANSFER_TOPIC =
-      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb";
-
-    for (let log of logs) {
-      if (
-        log.topics[0].toLowerCase().startsWith(TRANSFER_TOPIC) &&
-        log.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
-      ) {
-        const to = "0x" + log.topics[2].slice(26);
-
-        if (to.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) continue;
-
-        const amount = parseInt(log.data, 16) / 1e18;
-
-        return {
-          success: true,
-          amount,
-          to,
-          from: "decoded",
-        };
-      }
-    }
-
-    return { success: false };
+    return {
+      success: true,
+      amount: Number(tx.value) / 1e18,
+      to: tx.to,
+      from: tx.from,
+    };
 
   } catch (err) {
     console.log("BEP20 ERROR:", err.message);
     return { success: false };
   }
 };
+
+
+
+
 
 // ═══════════════════════════════════════════════
 // 💰 VERIFY + DEPOSIT
