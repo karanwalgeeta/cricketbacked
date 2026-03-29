@@ -385,16 +385,33 @@ console.log("🔥 VERIFY API HIT"); // ✅ ye add karo
 
     await user.save();
 
+    // await Transaction.create({
+    //   userId: user._id,
+    //   type: 'deposit',
+    //   amount: amountINR * 100,
+    //   status: 'completed',
+    //   txHash,
+    //   network,
+    //   balanceBefore: before,
+    //   balanceAfter: user.wallet.realBalance,
+    // });
+
+
     await Transaction.create({
-      userId: user._id,
-      type: 'deposit',
-      amount: amountINR * 100,
-      status: 'completed',
-      txHash,
-      network,
-      balanceBefore: before,
-      balanceAfter: user.wallet.realBalance,
-    });
+  userId: user._id,
+  type: 'deposit',
+  amount: amountINR * 100,
+  currency: 'INR',           // ← add karo
+  status: 'completed',
+  txHash,
+  network,
+  usdtAmount: verify.amount,           // ← actual USDT
+  usdtToInrRate: USDT_TO_INR,          // ← rate at time of deposit
+  fromAddress: verify.from,            // ← sender address
+  toAddress: verify.to,                // ← your wallet address
+  balanceBefore: before,
+  balanceAfter: user.wallet.realBalance,
+});
 
     res.json({
       success: true,
