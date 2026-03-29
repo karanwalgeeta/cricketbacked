@@ -573,17 +573,71 @@ const verifyTRC20 = async (txHash) => {
 
 
 
+// const verifyBEP20 = async (txHash) => {
+//   try {
+//     console.log("TX HASH:", txHash);
+
+//     const res = await axios.get(
+//       `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
+//     );
+
+//     console.log("FULL RESPONSE:", res.data);
+
+//     // ❌ check API error
+//     if (res.data.status !== "1") {
+//       console.log("API ERROR:", res.data.message);
+//       return { success: false };
+//     }
+
+//     const txs = res.data.result;
+
+//     // ✅ ensure array
+//     if (!Array.isArray(txs)) {
+//       console.log("NOT ARRAY:", txs);
+//       return { success: false };
+//     }
+
+//     console.log("TOTAL TXS:", txs.length);
+
+//     const tx = txs.find(
+//       (t) =>
+//         t.hash.toLowerCase() === txHash.toLowerCase() &&
+//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
+//     );
+
+//     if (!tx) {
+//       console.log("TX NOT FOUND");
+//       return { success: false };
+//     }
+
+//     console.log("MATCHED TX:", tx);
+
+//     return {
+//       success: true,
+//       amount: Number(tx.value) / 1e18,
+//       to: tx.to,
+//       from: tx.from,
+//     };
+
+//   } catch (err) {
+//     console.log("BEP20 ERROR:", err.message);
+//     return { success: false };
+//   }
+// };
+
+
+
 const verifyBEP20 = async (txHash) => {
   try {
     console.log("TX HASH:", txHash);
 
+    // ✅ V2 endpoint — chainid=56 is BSC Mainnet
     const res = await axios.get(
-      `https://api.bscscan.com/api?module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
+      `https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
     );
 
     console.log("FULL RESPONSE:", res.data);
 
-    // ❌ check API error
     if (res.data.status !== "1") {
       console.log("API ERROR:", res.data.message);
       return { success: false };
@@ -591,7 +645,6 @@ const verifyBEP20 = async (txHash) => {
 
     const txs = res.data.result;
 
-    // ✅ ensure array
     if (!Array.isArray(txs)) {
       console.log("NOT ARRAY:", txs);
       return { success: false };
@@ -624,8 +677,6 @@ const verifyBEP20 = async (txHash) => {
     return { success: false };
   }
 };
-
-
 
 
 
