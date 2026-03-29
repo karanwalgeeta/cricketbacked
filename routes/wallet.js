@@ -1,6 +1,4 @@
 
-
-
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -13,6 +11,7 @@ const auth = require('../middleware/auth');
 const TRC20_ADDRESS = process.env.USDT_TRC20_ADDRESS;
 const BEP20_ADDRESS = process.env.USDT_BEP20_ADDRESS;
 const BSCSCAN_API_KEY = process.env.BSCSCAN_API_KEY;
+const USDT_CONTRACT = process.env.USDT_BEP20_CONTRACT;
 
 const USDT_TO_INR = Number(process.env.USDT_TO_INR) || 80;
 
@@ -115,34 +114,6 @@ router.get('/usdt-address', (req, res) => {
 // ═══════════════════════════════════════════════
 // 🔍 VERIFY TRC20
 // ═══════════════════════════════════════════════
-// const verifyTRC20 = async (txHash) => {
-//   try {
-//     const res = await axios.get(
-//       `https://apilist.tronscan.org/api/transaction-info?hash=${txHash}`
-//     );
-
-//     const tx = res.data;
-
-//     if (!tx || tx.contractRet !== 'SUCCESS') {
-//       return { success: false };
-//     }
-
-//     return {
-//       success: true,
-//       amount: tx.contractData.amount / 1e6,
-//       to: tx.contractData.to_address,
-//       from: tx.ownerAddress,
-//     };
-
-//   } catch {
-//     return { success: false };
-//   }
-// };
-
-
-
-
-
 
 
 
@@ -197,36 +168,8 @@ const verifyTRC20 = async (txHash) => {
 // const verifyBEP20 = async (txHash) => {
 //   try {
 //     const res = await axios.get(
-//       `https://api.bscscan.com/api?module=transaction&action=gettxreceiptstatus&txhash=${txHash}&apikey=YourApiKey`
+//       `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
 //     );
-
-//     if (res.data.status !== "1") {
-//       return { success: false };
-//     }
-
-//     return {
-//       success: true,
-//       amount: 0,
-//       to: BEP20_ADDRESS,
-//       from: "unknown"
-//     };
-
-//   } catch {
-//     return { success: false };
-//   }
-// };
-
-
-
-// const verifyBEP20 = async (txHash) => {
-//   try {
-//     // const res = await axios.get(
-//     //   `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=YourApiKey`
-//     // );
-
-//     const res = await axios.get(
-//   `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BEP20_ADDRESS}`
-// );
 
 //     const txs = res.data.result;
 
@@ -234,19 +177,17 @@ const verifyTRC20 = async (txHash) => {
 //       return { success: false };
 //     }
 
-//     // 👉 find USDT transfer
 //     const tx = txs.find(
 //       (t) =>
-//         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase()
+//         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase() &&
+//         t.contractAddress.toLowerCase() === BEP20_ADDRESS.toLowerCase()
 //     );
 
-//     if (!tx) {
-//       return { success: false };
-//     }
+//     if (!tx) return { success: false };
 
 //     return {
 //       success: true,
-//       amount: Number(tx.value) / 1e18, // ⚠️ USDT decimals
+//       amount: Number(tx.value) / 1e18,
 //       to: tx.to,
 //       from: tx.from,
 //     };
@@ -258,13 +199,6 @@ const verifyTRC20 = async (txHash) => {
 // };
 
 
-
-
-
-
-
-
-// const USDT_CONTRACT = BEP20_ADDRESS; // BSC USDT
 
 const verifyBEP20 = async (txHash) => {
   try {
@@ -281,7 +215,7 @@ const verifyBEP20 = async (txHash) => {
     const tx = txs.find(
       (t) =>
         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase() &&
-        t.contractAddress.toLowerCase() === BEP20_ADDRESS.toLowerCase()
+        t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
     );
 
     if (!tx) return { success: false };
