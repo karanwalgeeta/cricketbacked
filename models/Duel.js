@@ -1,9 +1,10 @@
 
+
 const mongoose = require('mongoose');
 
 // ── Prediction sub-schema ──────────────────────────────────
 const predictionSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   username: String,
   predictionType: {
     type: String,
@@ -12,7 +13,7 @@ const predictionSchema = new mongoose.Schema({
   },
   predictedValue: { type: String, required: true },
   confidence:     { type: Number, min: 1, max: 100, default: 50 },
-  isCorrect:      { type: Boolean, default: null },   // null = result pending
+  isCorrect:      { type: Boolean, default: null },  // null = result pending
   submittedAt:    { type: Date, default: Date.now },
 });
 
@@ -31,19 +32,21 @@ const participantSchema = new mongoose.Schema({
 
 // ── Duel schema ────────────────────────────────────────────
 const duelSchema = new mongoose.Schema({
+
   roomCode: { type: String, unique: true, required: true, uppercase: true },
   duelType: { type: String, enum: ['1v1', 'group'], default: '1v1' },
+
   status: {
     type: String,
     enum: ['waiting', 'active', 'prediction_phase', 'locked', 'completed', 'cancelled'],
     default: 'waiting',
   },
 
-  // 🔥 NEW: Public/Private visibility
-  isPrivate: { 
-    type: Boolean, 
+  // Public / Private
+  isPrivate: {
+    type: Boolean,
     default: false,
-    index: true  // For faster queries on public duels
+    index: true,
   },
 
   // Match info
@@ -57,7 +60,7 @@ const duelSchema = new mongoose.Schema({
 
   // Settings
   stakeType:            { type: String, enum: ['coins', 'real'], default: 'coins' },
-  stakeAmount:          { type: Number, default: 100 }, // 🔥 NEW: Store stake amount
+  stakeAmount:          { type: Number, default: 100 },
   predictionCategories: [String],
 
   // Financial
@@ -70,16 +73,15 @@ const duelSchema = new mongoose.Schema({
   winnerUsername: String,
 
   // Creator info
-  createdBy:          { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  createdByUsername:  { type: String, required: true }, // 🔥 NEW: For public list display
-
-
+  createdBy:         { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  createdByUsername: { type: String, required: true },
 
   // Timestamps
   predictionDeadline: Date,
-  createdAt:          { type: Date, default: Date.now },
   completedAt:        Date,
-});
+
+// ✅ timestamps:true — createdAt + updatedAt auto-manage hoga
+}, { timestamps: true });
 
 // ── Static: generate unique room code ─────────────────────
 duelSchema.statics.generateRoomCode = function () {
@@ -91,18 +93,20 @@ duelSchema.statics.generateRoomCode = function () {
   return code;
 };
 
-// 🔥 NEW: Static method to get public duels
+// ── Static: get public duels ──────────────────────────────
 duelSchema.statics.getPublicDuels = function (limit = 50) {
-  return this.find({ 
+  return this.find({
     isPrivate: false,
-    status: 'waiting'
+    status: 'waiting',
   })
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 };
 
-// 🔥 Add index for better performance
+// ── Indexes ───────────────────────────────────────────────
 duelSchema.index({ isPrivate: 1, status: 1, createdAt: -1 });
+duelSchema.index({ 'participants.userId': 1 });
+duelSchema.index({ roomCode: 1 });
 
 module.exports = mongoose.model('Duel', duelSchema);
