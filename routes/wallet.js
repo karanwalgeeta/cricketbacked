@@ -1,4 +1,5 @@
 
+
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -683,88 +684,57 @@ const verifyTRC20 = async (txHash) => {
 
 
 
+const { ethers } = require("ethers");
+
 const verifyBEP20 = async (txHash) => {
   try {
-    console.log("TX HASH:", txHash);
+    // ✅ Public BSC RPC — no API key needed
+    const provider = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
 
-    // ✅ Direct BSCScan API — V1 still works for bscscan.com
-    const res = await axios.get(`https://api.bscscan.com/api`, {
-      params: {
-        module: "proxy",
-        action: "eth_getTransactionByHash",
-        txhash: txHash,
-        apikey: BSCSCAN_API_KEY,
-      },
-    });
+    const tx = await provider.getTransaction(txHash);
+    console.log("TX:", tx);
 
-    console.log("FULL RESPONSE:", res.data);
-
-    const tx = res.data?.result;
-
-    if (!tx || !tx.hash) {
-      console.log("TX NOT FOUND OR INVALID");
+    if (!tx) {
+      console.log("TX NOT FOUND");
       return { success: false };
     }
 
-    // ✅ Now get the receipt to confirm success
-    const receiptRes = await axios.get(`https://api.bscscan.com/api`, {
-      params: {
-        module: "proxy",
-        action: "eth_getTransactionReceipt",
-        txhash: txHash,
-        apikey: BSCSCAN_API_KEY,
-      },
-    });
-
-    const receipt = receiptRes.data?.result;
-
-    if (!receipt || receipt.status !== "0x1") {
-      console.log("TX FAILED OR NOT CONFIRMED");
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (!receipt || receipt.status !== 1) {
+      console.log("TX FAILED");
       return { success: false };
     }
 
-    // ✅ Verify it's a USDT transfer to your address
-    const toAddress = tx.to?.toLowerCase();
-    const inputData = tx.input;
-
-    // USDT contract address check
-    if (toAddress !== USDT_CONTRACT.toLowerCase()) {
-      console.log("NOT A USDT TX");
+    // USDT contract check
+    if (tx.to?.toLowerCase() !== USDT_CONTRACT.toLowerCase()) {
+      console.log("NOT USDT CONTRACT");
       return { success: false };
     }
 
-    // ERC20 transfer method ID = 0xa9059cbb
-    if (!inputData.startsWith("0xa9059cbb")) {
-      console.log("NOT A TRANSFER CALL");
+    // Decode transfer(address,uint256)
+    if (!tx.data.startsWith("0xa9059cbb")) {
+      console.log("NOT A TRANSFER");
       return { success: false };
     }
 
-    // Decode recipient and amount from input data
-    const recipient = "0x" + inputData.slice(34, 74);         // bytes 4-36
-    const amountHex = "0x" + inputData.slice(74, 138);        // bytes 36-68
-    const amount = parseInt(amountHex, 16) / 1e18;
+    const recipient = "0x" + tx.data.slice(34, 74);
+    const amount = parseInt("0x" + tx.data.slice(74, 138), 16) / 1e18;
 
     console.log("RECIPIENT:", recipient);
     console.log("AMOUNT:", amount);
 
     if (recipient.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) {
-      console.log("NOT SENT TO YOUR ADDRESS");
+      console.log("WRONG RECIPIENT:", recipient);
       return { success: false };
     }
 
-    return {
-      success: true,
-      amount,
-      to: recipient,
-      from: tx.from,
-    };
+    return { success: true, amount, to: recipient, from: tx.from };
 
   } catch (err) {
     console.log("BEP20 ERROR:", err.message);
     return { success: false };
   }
 };
-
 
 
 
