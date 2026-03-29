@@ -1,4 +1,5 @@
 
+
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -284,66 +285,133 @@ const verifyTRC20 = async (txHash) => {
 //   }
 // };
 
-const verifyBEP20 = async (txHash) => {
-  try {
 
-     console.log("TX HASH:", txHash); // ✅ yaha
 
-    const res = await axios.get(
-      `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
-    );
+// const verifyBEP20 = async (txHash) => {
+//   try {
+
+//      console.log("TX HASH:", txHash); // ✅ yaha
+
+//     const res = await axios.get(
+//       `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
+//     );
 
    
 
-    const receipt = res.data.result;
+//     const receipt = res.data.result;
 
-    console.log("RECEIPT:", receipt); 
+//     console.log("RECEIPT:", receipt); 
 
-    // ❌ no tx
-    if (!receipt) {
-      console.log("No receipt");
+//     // ❌ no tx
+//     if (!receipt) {
+//       console.log("No receipt");
+//       return { success: false };
+//     }
+
+//     // ❌ failed tx
+//     if (receipt.status !== "0x1") {
+//       console.log("Tx failed");
+//       return { success: false };
+//     }
+
+//     const logs = receipt.logs;
+
+//     console.log("LOGS:", logs);
+
+//     if (!logs || logs.length === 0) {
+//       console.log("No logs");
+//       return { success: false };
+//     }
+
+//     // ✅ find USDT transfer log
+//     const log = logs.find(
+//       (l) =>
+//         l.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
+//     );
+
+//     if (!log) {
+//       console.log("No USDT log found");
+//       return { success: false };
+//     }
+
+//     // 🔥 decode receiver address
+//     const to = "0x" + log.topics[2].slice(26);
+
+//     // 🔥 decode amount
+//     const amount = parseInt(log.data, 16) / 1e18;
+
+//     console.log("DETECTED:", { to, amount });
+
+//     return {
+//       success: true,
+//       amount,
+//       to,
+//       from: "unknown"
+//     };
+
+//   } catch (err) {
+//     console.log("BEP20 ERROR:", err.message);
+//     return { success: false };
+//   }
+// };
+
+
+
+
+const verifyBEP20 = async (txHash) => {
+  try {
+    // 1️⃣ Get transaction receipt
+    const receiptRes = await axios.get(
+      `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
+    );
+
+    const receipt = receiptRes.data.result;
+
+    if (!receipt || !receipt.logs) {
+      console.log("No receipt/logs");
       return { success: false };
     }
 
-    // ❌ failed tx
-    if (receipt.status !== "0x1") {
-      console.log("Tx failed");
-      return { success: false };
-    }
-
+    // 2️⃣ Decode logs
     const logs = receipt.logs;
 
-    console.log("LOGS:", logs);
+    // USDT transfer topic (Transfer event)
+    const transferTopic =
+      "0xddf252ad00000000000000000000000000000000000000000000000000000000";
 
-    if (!logs || logs.length === 0) {
-      console.log("No logs");
-      return { success: false };
-    }
-
-    // ✅ find USDT transfer log
     const log = logs.find(
       (l) =>
-        l.address.toLowerCase() === USDT_CONTRACT.toLowerCase()
+        l.address.toLowerCase() === USDT_CONTRACT.toLowerCase() &&
+        l.topics[0] === transferTopic
     );
 
     if (!log) {
-      console.log("No USDT log found");
+      console.log("No USDT transfer log");
       return { success: false };
     }
 
-    // 🔥 decode receiver address
-    const to = "0x" + log.topics[2].slice(26);
+    // 3️⃣ Extract addresses
+    const to =
+      "0x" + log.topics[2].slice(26); // receiver
+    const from =
+      "0x" + log.topics[1].slice(26); // sender
 
-    // 🔥 decode amount
+    // 4️⃣ Extract amount
     const amount = parseInt(log.data, 16) / 1e18;
 
-    console.log("DETECTED:", { to, amount });
+    console.log("TO:", to);
+    console.log("EXPECTED:", BEP20_ADDRESS);
+
+    // 5️⃣ Match address
+    if (to.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) {
+      return { success: false };
+    }
 
     return {
       success: true,
       amount,
       to,
-      from: "unknown"
+      from,
     };
 
   } catch (err) {
@@ -353,15 +421,17 @@ const verifyBEP20 = async (txHash) => {
 };
 
 
-
-
-
 // ═══════════════════════════════════════════════
 // 💰 VERIFY + DEPOSIT
 // ═══════════════════════════════════════════════
 router.post('/verify-usdt', auth, async (req, res) => {
+
+console.log("🔥 VERIFY API HIT"); // ✅ ye add karo
+
   try {
     const { txHash, network } = req.body;
+
+    console.log("BODY:", req.body); 
 
     if (!txHash || !network) {
       return res.json({ success: false, message: 'txHash & network required' });
