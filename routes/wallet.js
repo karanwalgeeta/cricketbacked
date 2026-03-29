@@ -1,5 +1,6 @@
 
 
+
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -11,6 +12,7 @@ const auth = require('../middleware/auth');
 // 🔥 Wallets (Admin deposit wallet)
 const TRC20_ADDRESS = process.env.USDT_TRC20_ADDRESS;
 const BEP20_ADDRESS = process.env.USDT_BEP20_ADDRESS;
+const BSCSCAN_API_KEY = process.env.BSCSCAN_API_KEY;
 
 const USDT_TO_INR = Number(process.env.USDT_TO_INR) || 80;
 
@@ -216,10 +218,58 @@ const verifyTRC20 = async (txHash) => {
 
 
 
+// const verifyBEP20 = async (txHash) => {
+//   try {
+//     // const res = await axios.get(
+//     //   `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=YourApiKey`
+//     // );
+
+//     const res = await axios.get(
+//   `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}&apikey=${BEP20_ADDRESS}`
+// );
+
+//     const txs = res.data.result;
+
+//     if (!txs || txs.length === 0) {
+//       return { success: false };
+//     }
+
+//     // 👉 find USDT transfer
+//     const tx = txs.find(
+//       (t) =>
+//         t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase()
+//     );
+
+//     if (!tx) {
+//       return { success: false };
+//     }
+
+//     return {
+//       success: true,
+//       amount: Number(tx.value) / 1e18, // ⚠️ USDT decimals
+//       to: tx.to,
+//       from: tx.from,
+//     };
+
+//   } catch (err) {
+//     console.log("BEP20 ERROR:", err.message);
+//     return { success: false };
+//   }
+// };
+
+
+
+
+
+
+
+
+// const USDT_CONTRACT = BEP20_ADDRESS; // BSC USDT
+
 const verifyBEP20 = async (txHash) => {
   try {
     const res = await axios.get(
-      `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=YourApiKey`
+      `https://api.bscscan.com/api?module=account&action=tokentx&txhash=${txHash}&apikey=${BSCSCAN_API_KEY}`
     );
 
     const txs = res.data.result;
@@ -228,19 +278,17 @@ const verifyBEP20 = async (txHash) => {
       return { success: false };
     }
 
-    // 👉 find USDT transfer
     const tx = txs.find(
       (t) =>
-        t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase()
+        t.to.toLowerCase() === BEP20_ADDRESS.toLowerCase() &&
+        t.contractAddress.toLowerCase() === BEP20_ADDRESS.toLowerCase()
     );
 
-    if (!tx) {
-      return { success: false };
-    }
+    if (!tx) return { success: false };
 
     return {
       success: true,
-      amount: Number(tx.value) / 1e18, // ⚠️ USDT decimals
+      amount: Number(tx.value) / 1e18,
       to: tx.to,
       from: tx.from,
     };
