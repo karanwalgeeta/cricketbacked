@@ -9,53 +9,55 @@ const auth = require('../middleware/auth');
 const COMMISSION = parseFloat(process.env.HOUSE_COMMISSION) || 0.10;
 
 // ══════════════════════════════════════════════════════════
-// POST /api/duel/create (UPDATED with isPrivate)
+// POST /api/duel/create
 // ══════════════════════════════════════════════════════════
 router.post('/create', auth, async (req, res) => {
   try {
     const {
       matchId, matchName, stakeAmount, stakeType,
       duelType, predictionCategories, maxParticipants,
-      isPrivate,  // 🔥 NEW
+      isPrivate,
     } = req.body;
+
+    if (!matchId) {
+      return res.status(400).json({ success: false, message: 'Match ID is required' });
+    }
+    if (!stakeAmount || stakeAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid stake amount required' });
+    }
 
     const user = await User.findById(req.user._id);
 
-    // Validate stake balance
+    // ✅ Balance check
     if (stakeType === 'coins' && user.wallet.coins < stakeAmount) {
       return res.status(400).json({ success: false, message: `Insufficient coins! You have ${user.wallet.coins} coins` });
     }
     if (stakeType === 'real' && user.wallet.realBalance < stakeAmount * 100) {
       return res.status(400).json({ success: false, message: 'Insufficient real balance' });
     }
-    if (!matchId) {
-      return res.status(400).json({ success: false, message: 'Match ID is required' });
-    }
 
-    // Deduct stake from user
+    // Deduct stake
     const balanceBefore = stakeType === 'coins' ? user.wallet.coins : user.wallet.realBalance;
     if (stakeType === 'coins') user.wallet.coins -= stakeAmount;
     else user.wallet.realBalance -= stakeAmount * 100;
     user.wallet.totalSpent = (user.wallet.totalSpent || 0) + stakeAmount;
     await user.save();
 
-    // Generate unique room code
     const roomCode = Duel.generateRoomCode();
 
-    // Create duel
     const duel = await Duel.create({
       roomCode,
       matchId,
       matchName,
       duelType: duelType || '1v1',
       stakeType: stakeType || 'coins',
-      stakeAmount: stakeAmount,
+      stakeAmount,
       maxParticipants: maxParticipants || 2,
       predictionCategories: predictionCategories || ['match_winner', 'top_batsman'],
       predictionDeadline: new Date(Date.now() + 2 * 60 * 60 * 1000),
       createdBy: user._id,
-      createdByUsername: user.username,  // 🔥 NEW
-      isPrivate: isPrivate || false,     // 🔥 NEW
+      createdByUsername: user.username,
+      isPrivate: isPrivate || false,
       participants: [{
         userId: user._id,
         username: user.username,
@@ -67,7 +69,6 @@ router.post('/create', auth, async (req, res) => {
       totalPool: stakeAmount,
     });
 
-    // Record transaction
     await Transaction.create({
       userId: user._id,
       type: 'duel_stake',
@@ -82,7 +83,7 @@ router.post('/create', auth, async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `Duel created! Share room code: ${roomCode}`,
+      message: `Duel created! Room code: ${roomCode}`,
       duel: {
         id: duel._id,
         roomCode: duel.roomCode,
@@ -95,9 +96,10 @@ router.post('/create', auth, async (req, res) => {
         predictionCategories: duel.predictionCategories,
         predictionDeadline: duel.predictionDeadline,
         maxParticipants: duel.maxParticipants,
-        isPrivate: duel.isPrivate,  // 🔥 NEW
+        isPrivate: duel.isPrivate,
       },
     });
+
   } catch (err) {
     console.error('Create duel:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -105,11 +107,12 @@ router.post('/create', auth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
-// GET /api/duel/public (NEW)
+// GET /api/duel/public
+// ✅ Must be BEFORE /:roomCode
 // ══════════════════════════════════════════════════════════
 router.get('/public', auth, async (req, res) => {
   try {
-    const publicDuels = await Duel.find({ 
+    const publicDuels = await Duel.find({
       isPrivate: false,
       status: 'waiting',
     })
@@ -118,7 +121,6 @@ router.get('/public', auth, async (req, res) => {
       .select('roomCode matchName stakeType stakeAmount totalPool maxParticipants participants predictionCategories predictionDeadline createdByUsername status')
       .lean();
 
-    // Format for frontend
     const formattedDuels = publicDuels.map(duel => ({
       _id: duel._id,
       roomCode: duel.roomCode,
@@ -138,10 +140,8 @@ router.get('/public', auth, async (req, res) => {
       status: duel.status,
     }));
 
-    res.json({
-      success: true,
-      duels: formattedDuels,
-    });
+    res.json({ success: true, duels: formattedDuels });
+
   } catch (err) {
     console.error('Get public duels:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -149,7 +149,80 @@ router.get('/public', auth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
-// POST /api/duel/join (UPDATED - works for both public and private)
+// GET /api/duel/my-duels
+// ✅ Must be BEFORE /:roomCode
+// ══════════════════════════════════════════════════════════
+router.get('/my-duels', auth, async (req, res) => {
+  try {
+    const duels = await Duel.find({ 'participants.userId': req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(30);
+
+    res.json({ success: true, duels });
+
+  } catch (err) {
+    console.error('My duels error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// POST /api/duel/predict
+// ✅ Must be BEFORE /:roomCode
+// ══════════════════════════════════════════════════════════
+router.post('/predict', auth, async (req, res) => {
+  try {
+    const { duelId, predictions } = req.body;
+
+    if (!duelId || !predictions?.length) {
+      return res.status(400).json({ success: false, message: 'duelId and predictions are required' });
+    }
+
+    const duel = await Duel.findById(duelId);
+    if (!duel) return res.status(404).json({ success: false, message: 'Duel not found' });
+
+    if (!['prediction_phase', 'active'].includes(duel.status)) {
+      return res.status(400).json({ success: false, message: 'Predictions are not open right now' });
+    }
+
+    if (duel.predictionDeadline && new Date() > duel.predictionDeadline) {
+      return res.status(400).json({ success: false, message: 'Prediction deadline has passed' });
+    }
+
+    const idx = duel.participants.findIndex(
+      p => p.userId.toString() === req.user._id.toString()
+    );
+    if (idx === -1) {
+      return res.status(403).json({ success: false, message: 'You are not a participant in this duel' });
+    }
+    if (duel.participants[idx].isReady) {
+      return res.status(400).json({ success: false, message: 'You have already submitted predictions' });
+    }
+
+    duel.participants[idx].predictions = predictions.map(p => ({
+      userId: req.user._id,
+      username: req.user.username,
+      predictionType: p.type,
+      predictedValue: p.value,
+      confidence: p.confidence || 50,
+    }));
+    duel.participants[idx].isReady = true;
+
+    if (duel.participants.every(p => p.isReady)) {
+      duel.status = 'locked';
+    }
+    await duel.save();
+
+    res.json({ success: true, message: 'Predictions submitted successfully!' });
+
+  } catch (err) {
+    console.error('Predict:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// POST /api/duel/join
 // ══════════════════════════════════════════════════════════
 router.post('/join', auth, async (req, res) => {
   try {
@@ -167,14 +240,17 @@ router.post('/join', auth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Duel is full' });
     }
 
-    // Check not already joined
-    const alreadyIn = duel.participants.find(p => p.userId.toString() === user._id.toString());
-    if (alreadyIn) return res.status(400).json({ success: false, message: 'You are already in this duel' });
+    const alreadyIn = duel.participants.find(
+      p => p.userId.toString() === user._id.toString()
+    );
+    if (alreadyIn) {
+      return res.status(400).json({ success: false, message: 'You are already in this duel' });
+    }
 
-    // Get stake amount from first participant
-    const stakeAmount = duel.participants[0]?.stakeAmount || duel.stakeAmount;
-    const stakeType = duel.stakeType;
+    const stakeAmount = duel.stakeAmount;
+    const stakeType   = duel.stakeType;
 
+    // ✅ Balance check
     if (stakeType === 'coins' && user.wallet.coins < stakeAmount) {
       return res.status(400).json({ success: false, message: `Insufficient coins! Need ${stakeAmount} coins` });
     }
@@ -189,7 +265,6 @@ router.post('/join', auth, async (req, res) => {
     user.wallet.totalSpent = (user.wallet.totalSpent || 0) + stakeAmount;
     await user.save();
 
-    // Add participant to duel
     duel.participants.push({
       userId: user._id,
       username: user.username,
@@ -200,13 +275,11 @@ router.post('/join', auth, async (req, res) => {
     });
     duel.totalPool += stakeAmount;
 
-    // If duel is now full → start prediction phase
     if (duel.participants.length >= duel.maxParticipants) {
       duel.status = 'prediction_phase';
     }
     await duel.save();
 
-    // Record transaction
     await Transaction.create({
       userId: user._id,
       type: 'duel_stake',
@@ -236,6 +309,7 @@ router.post('/join', auth, async (req, res) => {
         })),
       },
     });
+
   } catch (err) {
     console.error('Join duel:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -243,97 +317,23 @@ router.post('/join', auth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
-// GET /api/duel/my-duels
-// ══════════════════════════════════════════════════════════
-router.get('/my-duels', auth, async (req, res) => {
-  try {
-    const duels = await Duel.find({ 'participants.userId': req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(30);
-    res.json({ success: true, duels });
-  } catch (err) {
-    console.error('My duels error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ══════════════════════════════════════════════════════════
-// GET /api/duel/:roomCode
-// ══════════════════════════════════════════════════════════
-router.get('/:roomCode', auth, async (req, res) => {
-  try {
-    const duel = await Duel.findOne({ roomCode: req.params.roomCode.toUpperCase() });
-    if (!duel) return res.status(404).json({ success: false, message: 'Duel not found' });
-    res.json({ success: true, duel });
-  } catch (err) {
-    console.error('Get duel error:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ══════════════════════════════════════════════════════════
-// POST /api/duel/predict
-// ══════════════════════════════════════════════════════════
-router.post('/predict', auth, async (req, res) => {
-  try {
-    const { duelId, predictions } = req.body;
-    const user = req.user;
-
-    if (!duelId || !predictions?.length) {
-      return res.status(400).json({ success: false, message: 'duelId and predictions are required' });
-    }
-
-    const duel = await Duel.findById(duelId);
-    if (!duel) return res.status(404).json({ success: false, message: 'Duel not found' });
-
-    if (!['prediction_phase', 'active'].includes(duel.status)) {
-      return res.status(400).json({ success: false, message: 'Predictions are not open right now' });
-    }
-
-    if (duel.predictionDeadline && new Date() > duel.predictionDeadline) {
-      return res.status(400).json({ success: false, message: 'Prediction deadline has passed' });
-    }
-
-    const idx = duel.participants.findIndex(p => p.userId.toString() === user._id.toString());
-    if (idx === -1) return res.status(403).json({ success: false, message: 'You are not a participant in this duel' });
-
-    if (duel.participants[idx].isReady) {
-      return res.status(400).json({ success: false, message: 'You have already submitted predictions' });
-    }
-
-    // Save predictions
-    duel.participants[idx].predictions = predictions.map(p => ({
-      userId: user._id,
-      username: user.username,
-      predictionType: p.type,
-      predictedValue: p.value,
-      confidence: p.confidence || 50,
-    }));
-    duel.participants[idx].isReady = true;
-
-    // If all players submitted → lock the duel
-    if (duel.participants.every(p => p.isReady)) {
-      duel.status = 'locked';
-    }
-    await duel.save();
-
-    res.json({ success: true, message: 'Predictions submitted successfully!' });
-  } catch (err) {
-    console.error('Predict:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// ══════════════════════════════════════════════════════════
-// POST /api/duel/result
+// POST /api/duel/result  ⚠️ Admin/system only
 // ══════════════════════════════════════════════════════════
 router.post('/result', auth, async (req, res) => {
   try {
     const { duelId, correctAnswers } = req.body;
 
+    // ✅ Only admin can trigger result
+    const callerUser = await User.findById(req.user._id);
+    if (!callerUser?.isAdmin) {
+      return res.status(403).json({ success: false, message: 'Admin only' });
+    }
+
     const duel = await Duel.findById(duelId);
     if (!duel) return res.status(404).json({ success: false, message: 'Duel not found' });
-    if (duel.status === 'completed') return res.status(400).json({ success: false, message: 'Duel already completed' });
+    if (duel.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Duel already completed' });
+    }
 
     // Score each participant
     let highestScore = -1;
@@ -343,26 +343,31 @@ router.post('/result', auth, async (req, res) => {
       let score = 0;
       for (const pred of participant.predictions) {
         const correct = correctAnswers[pred.predictionType];
-        pred.isCorrect = correct && pred.predictedValue.toLowerCase() === correct.toLowerCase();
+        pred.isCorrect = correct &&
+          pred.predictedValue.toLowerCase() === correct.toLowerCase();
         if (pred.isCorrect) score++;
       }
       participant.score = score;
-      if (score > highestScore) { highestScore = score; winners = [participant]; }
-      else if (score === highestScore) { winners.push(participant); }
+      if (score > highestScore) {
+        highestScore = score;
+        winners = [participant];
+      } else if (score === highestScore) {
+        winners.push(participant);
+      }
     }
 
-    // Calculate prize
-    const commission = Math.floor(duel.totalPool * COMMISSION);
-    const prizePool = duel.totalPool - commission;
+    // ✅ Prize calculation
+    const commission    = Math.floor(duel.totalPool * COMMISSION);
+    const prizePool     = duel.totalPool - commission;
     const prizePerWinner = Math.floor(prizePool / winners.length);
 
     duel.houseCommission = commission;
-    duel.winnerPrize = prizePerWinner;
-    duel.status = 'completed';
-    duel.completedAt = new Date();
+    duel.winnerPrize     = prizePerWinner;
+    duel.status          = 'completed';
+    duel.completedAt     = new Date();
 
     if (winners.length === 1) {
-      duel.winnerId = winners[0].userId;
+      duel.winnerId       = winners[0].userId;
       duel.winnerUsername = winners[0].username;
     }
     await duel.save();
@@ -372,14 +377,20 @@ router.post('/result', auth, async (req, res) => {
       const winnerUser = await User.findById(winner.userId);
       if (!winnerUser) continue;
 
-      const before = duel.stakeType === 'coins' ? winnerUser.wallet.coins : winnerUser.wallet.realBalance;
-      if (duel.stakeType === 'coins') winnerUser.wallet.coins += prizePerWinner;
-      else winnerUser.wallet.realBalance += prizePerWinner;
+      const before = duel.stakeType === 'coins'
+        ? winnerUser.wallet.coins
+        : winnerUser.wallet.realBalance;
 
-      winnerUser.wallet.totalEarned = (winnerUser.wallet.totalEarned || 0) + prizePerWinner;
-      winnerUser.stats.duelsWon = (winnerUser.stats.duelsWon || 0) + 1;
-      winnerUser.stats.winStreak = (winnerUser.stats.winStreak || 0) + 1;
-      winnerUser.stats.maxWinStreak = Math.max(winnerUser.stats.winStreak || 0, winnerUser.stats.maxWinStreak || 0);
+      if (duel.stakeType === 'coins') winnerUser.wallet.coins += prizePerWinner;
+      else winnerUser.wallet.realBalance += prizePerWinner * 100; // ✅ *100 fix
+
+      winnerUser.wallet.totalEarned   = (winnerUser.wallet.totalEarned   || 0) + prizePerWinner;
+      winnerUser.stats.duelsWon       = (winnerUser.stats.duelsWon       || 0) + 1;
+      winnerUser.stats.winStreak      = (winnerUser.stats.winStreak      || 0) + 1;
+      winnerUser.stats.maxWinStreak   = Math.max(
+        winnerUser.stats.winStreak || 0,
+        winnerUser.stats.maxWinStreak || 0
+      );
       await winnerUser.save();
 
       await Transaction.create({
@@ -391,19 +402,24 @@ router.post('/result', auth, async (req, res) => {
         description: `Won duel ${duel.roomCode}! 🏆`,
         duelId: duel._id,
         balanceBefore: before,
-        balanceAfter: duel.stakeType === 'coins' ? winnerUser.wallet.coins : winnerUser.wallet.realBalance,
+        balanceAfter: duel.stakeType === 'coins'
+          ? winnerUser.wallet.coins
+          : winnerUser.wallet.realBalance,
       });
     }
 
-    // Update loser stats
+    // ✅ Update ALL participants stats (winners + losers)
     for (const participant of duel.participants) {
-      const isWinner = winners.some(w => w.userId.toString() === participant.userId.toString());
+      const isWinner = winners.some(
+        w => w.userId.toString() === participant.userId.toString()
+      );
       const pUser = await User.findById(participant.userId);
       if (!pUser) continue;
 
-      pUser.stats.duelsPlayed = (pUser.stats.duelsPlayed || 0) + 1;
-      pUser.stats.totalPredictions = (pUser.stats.totalPredictions || 0) + participant.predictions.length;
-      pUser.stats.correctPredictions = (pUser.stats.correctPredictions || 0) + participant.predictions.filter(p => p.isCorrect).length;
+      pUser.stats.duelsPlayed       = (pUser.stats.duelsPlayed       || 0) + 1;
+      pUser.stats.totalPredictions  = (pUser.stats.totalPredictions  || 0) + participant.predictions.length;
+      pUser.stats.correctPredictions = (pUser.stats.correctPredictions || 0) +
+        participant.predictions.filter(p => p.isCorrect).length;
 
       if (!isWinner) {
         pUser.stats.duelsLost = (pUser.stats.duelsLost || 0) + 1;
@@ -426,8 +442,23 @@ router.post('/result', auth, async (req, res) => {
         })),
       },
     });
+
   } catch (err) {
     console.error('Result:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// GET /api/duel/:roomCode  ← LAST (dynamic param)
+// ══════════════════════════════════════════════════════════
+router.get('/:roomCode', auth, async (req, res) => {
+  try {
+    const duel = await Duel.findOne({ roomCode: req.params.roomCode.toUpperCase() });
+    if (!duel) return res.status(404).json({ success: false, message: 'Duel not found' });
+    res.json({ success: true, duel });
+  } catch (err) {
+    console.error('Get duel error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
