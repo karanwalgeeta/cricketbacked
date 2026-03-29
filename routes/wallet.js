@@ -627,48 +627,135 @@ const verifyTRC20 = async (txHash) => {
 
 
 
+// paid k liye h 
+
+
+// const verifyBEP20 = async (txHash) => {
+//   try {
+//     console.log("TX HASH:", txHash);
+
+//     // ✅ V2 endpoint — chainid=56 is BSC Mainnet
+//     const res = await axios.get(
+//       `https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
+//     );
+
+//     console.log("FULL RESPONSE:", res.data);
+
+//     if (res.data.status !== "1") {
+//       console.log("API ERROR:", res.data.message);
+//       return { success: false };
+//     }
+
+//     const txs = res.data.result;
+
+//     if (!Array.isArray(txs)) {
+//       console.log("NOT ARRAY:", txs);
+//       return { success: false };
+//     }
+
+//     console.log("TOTAL TXS:", txs.length);
+
+//     const tx = txs.find(
+//       (t) =>
+//         t.hash.toLowerCase() === txHash.toLowerCase() &&
+//         t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
+//     );
+
+//     if (!tx) {
+//       console.log("TX NOT FOUND");
+//       return { success: false };
+//     }
+
+//     console.log("MATCHED TX:", tx);
+
+//     return {
+//       success: true,
+//       amount: Number(tx.value) / 1e18,
+//       to: tx.to,
+//       from: tx.from,
+//     };
+
+//   } catch (err) {
+//     console.log("BEP20 ERROR:", err.message);
+//     return { success: false };
+//   }
+// };
+
+
+
 const verifyBEP20 = async (txHash) => {
   try {
     console.log("TX HASH:", txHash);
 
-    // ✅ V2 endpoint — chainid=56 is BSC Mainnet
-    const res = await axios.get(
-      `https://api.etherscan.io/v2/api?chainid=56&module=account&action=tokentx&address=${BEP20_ADDRESS}&startblock=0&endblock=99999999&sort=desc&apikey=${BSCSCAN_API_KEY}`
-    );
+    // ✅ Direct BSCScan API — V1 still works for bscscan.com
+    const res = await axios.get(`https://api.bscscan.com/api`, {
+      params: {
+        module: "proxy",
+        action: "eth_getTransactionByHash",
+        txhash: txHash,
+        apikey: BSCSCAN_API_KEY,
+      },
+    });
 
     console.log("FULL RESPONSE:", res.data);
 
-    if (res.data.status !== "1") {
-      console.log("API ERROR:", res.data.message);
+    const tx = res.data?.result;
+
+    if (!tx || !tx.hash) {
+      console.log("TX NOT FOUND OR INVALID");
       return { success: false };
     }
 
-    const txs = res.data.result;
+    // ✅ Now get the receipt to confirm success
+    const receiptRes = await axios.get(`https://api.bscscan.com/api`, {
+      params: {
+        module: "proxy",
+        action: "eth_getTransactionReceipt",
+        txhash: txHash,
+        apikey: BSCSCAN_API_KEY,
+      },
+    });
 
-    if (!Array.isArray(txs)) {
-      console.log("NOT ARRAY:", txs);
+    const receipt = receiptRes.data?.result;
+
+    if (!receipt || receipt.status !== "0x1") {
+      console.log("TX FAILED OR NOT CONFIRMED");
       return { success: false };
     }
 
-    console.log("TOTAL TXS:", txs.length);
+    // ✅ Verify it's a USDT transfer to your address
+    const toAddress = tx.to?.toLowerCase();
+    const inputData = tx.input;
 
-    const tx = txs.find(
-      (t) =>
-        t.hash.toLowerCase() === txHash.toLowerCase() &&
-        t.contractAddress.toLowerCase() === USDT_CONTRACT.toLowerCase()
-    );
-
-    if (!tx) {
-      console.log("TX NOT FOUND");
+    // USDT contract address check
+    if (toAddress !== USDT_CONTRACT.toLowerCase()) {
+      console.log("NOT A USDT TX");
       return { success: false };
     }
 
-    console.log("MATCHED TX:", tx);
+    // ERC20 transfer method ID = 0xa9059cbb
+    if (!inputData.startsWith("0xa9059cbb")) {
+      console.log("NOT A TRANSFER CALL");
+      return { success: false };
+    }
+
+    // Decode recipient and amount from input data
+    const recipient = "0x" + inputData.slice(34, 74);         // bytes 4-36
+    const amountHex = "0x" + inputData.slice(74, 138);        // bytes 36-68
+    const amount = parseInt(amountHex, 16) / 1e18;
+
+    console.log("RECIPIENT:", recipient);
+    console.log("AMOUNT:", amount);
+
+    if (recipient.toLowerCase() !== BEP20_ADDRESS.toLowerCase()) {
+      console.log("NOT SENT TO YOUR ADDRESS");
+      return { success: false };
+    }
 
     return {
       success: true,
-      amount: Number(tx.value) / 1e18,
-      to: tx.to,
+      amount,
+      to: recipient,
       from: tx.from,
     };
 
@@ -677,6 +764,7 @@ const verifyBEP20 = async (txHash) => {
     return { success: false };
   }
 };
+
 
 
 
