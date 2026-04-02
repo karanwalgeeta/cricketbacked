@@ -14,24 +14,23 @@ const transactionSchema = new mongoose.Schema({
       'duel_refund',
       'commission',
       'bonus',
-      'referral'
+      'referral',
     ],
     required: true,
   },
 
   amount:   { type: Number, required: true },
-
-  // ✅ INR add kiya — crypto deposits INR mein store hote hain
   currency: { type: String, enum: ['coins', 'INR'], default: 'INR' },
 
   status: {
     type: String,
     enum: ['pending', 'completed', 'failed', 'refunded'],
-    default: 'pending'
+    default: 'pending',
   },
 
   description: String,
-  duelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Duel' },
+  adminNote:   { type: String, default: null }, // ✅ sahi jagah
+  duelId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Duel' },
 
   // 🔥 CRYPTO FIELDS
   txHash:          { type: String, unique: true, sparse: true },
@@ -40,9 +39,9 @@ const transactionSchema = new mongoose.Schema({
   toAddress:       String,
   withdrawAddress: String,
 
-  // 💰 USDT amount alag track karo (INR conversion ke alawa)
-  usdtAmount: { type: Number },          // actual USDT value jo send hua
-  usdtToInrRate: { type: Number },       // conversion rate at time of tx
+  // 💰 USDT tracking
+  usdtAmount:    { type: Number }, // actual USDT value
+  usdtToInrRate: { type: Number }, // rate at time of tx
 
   // ✅ PayPal fields
   paypalOrderId:   String,
@@ -52,11 +51,14 @@ const transactionSchema = new mongoose.Schema({
   balanceBefore: Number,
   balanceAfter:  Number,
 
-}, { timestamps: true });  // ← createdAt/updatedAt auto-manage hoga
+}, { timestamps: true });
 
 // 🔥 Indexes
 transactionSchema.index({ userId: 1, createdAt: -1 });
 transactionSchema.index({ txHash: 1 });
-transactionSchema.index({ status: 1 });  // ← pending withdrawals filter ke liye useful
+transactionSchema.index({ status: 1 });
+transactionSchema.index({ type: 1, status: 1 }); // ✅ admin filter ke liye
 
 module.exports = mongoose.model('Transaction', transactionSchema);
+
+
