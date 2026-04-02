@@ -26,6 +26,7 @@ const sanitizeUser = (u) => ({
   referralCode: u.referralCode,
   referralEarnings: u.referralEarnings,
   createdAt: u.createdAt,
+   isAdmin: u.isAdmin, 
 });
 
 
