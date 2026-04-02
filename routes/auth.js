@@ -1,5 +1,4 @@
 
-
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
@@ -116,53 +115,16 @@ router.post('/register', async (req, res) => {
 // ═══════════════════════════════════════════════
 // 🔐 LOGIN
 // ═══════════════════════════════════════════════
-// router.post('/login', async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     const user = await User.findOne({ email: email.toLowerCase() });
-//     if (!user) {
-//       return res.json({ success: false, message: 'Invalid credentials' });
-//     }
-
-//     const match = await bcrypt.compare(password, user.password);
-//     if (!match) {
-//       return res.json({ success: false, message: 'Invalid credentials' });
-//     }
-
-//     const token = generateToken(user._id);
-
-//     res.json({
-//       success: true,
-//       token,
-//       user: sanitizeUser(user),
-//     });
-
-//   } catch (err) {
-//     res.status(500).json({ success: false });
-//   }
-// });
-
-
-
-
-
 router.post('/login', async (req, res) => {
   try {
-    console.log("LOGIN BODY:", req.body); // 🔥
-
     const { email, password } = req.body;
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    console.log("USER FOUND:", user); // 🔥
-
     if (!user) {
       return res.json({ success: false, message: 'Invalid credentials' });
     }
 
     const match = await bcrypt.compare(password, user.password);
-    console.log("PASSWORD MATCH:", match); // 🔥
-
     if (!match) {
       return res.json({ success: false, message: 'Invalid credentials' });
     }
@@ -176,10 +138,47 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (err) {
-    console.error("LOGIN ERROR:", err); // 🔥
     res.status(500).json({ success: false });
   }
 });
+
+
+
+
+
+// router.post('/login', async (req, res) => {
+//   try {
+//     console.log("LOGIN BODY:", req.body); // 🔥
+
+//     const { email, password } = req.body;
+
+//     const user = await User.findOne({ email: email.toLowerCase() });
+//     console.log("USER FOUND:", user); // 🔥
+
+//     if (!user) {
+//       return res.json({ success: false, message: 'Invalid credentials' });
+//     }
+
+//     const match = await bcrypt.compare(password, user.password);
+//     console.log("PASSWORD MATCH:", match); // 🔥
+
+//     if (!match) {
+//       return res.json({ success: false, message: 'Invalid credentials' });
+//     }
+
+//     const token = generateToken(user._id);
+
+//     res.json({
+//       success: true,
+//       token,
+//       user: sanitizeUser(user),
+//     });
+
+//   } catch (err) {
+//     console.error("LOGIN ERROR:", err); // 🔥
+//     res.status(500).json({ success: false });
+//   }
+// });
 
 
 // ═══════════════════════════════════════════════
