@@ -1,37 +1,39 @@
 
 const express = require('express');
-const router = express.Router();
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+const router  = express.Router();
+const jwt     = require('jsonwebtoken');
+const bcrypt  = require('bcryptjs');
 
-const User = require('../models/User');
+const User        = require('../models/User');
 const Transaction = require('../models/Transaction');
-const auth = require('../middleware/auth');
+const auth        = require('../middleware/auth');
 
-// 🔐 Generate JWT
+// ── Generate JWT ───────────────────────────────────────────
 const generateToken = (userId) =>
   jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-// 👤 Safe user response
+// ── Safe user response ─────────────────────────────────────
 const sanitizeUser = (u) => ({
-  id: u._id,
-  username: u.username,
-  email: u.email,
-  phone: u.phone,
-  avatar: u.avatar,
-  wallet: u.wallet,
-  cryptoWallets: u.cryptoWallets,
-  stats: u.stats,
-  referralCode: u.referralCode,
+  id:               u._id,
+  username:         u.username,
+  email:            u.email,
+  phone:            u.phone,
+  avatar:           u.avatar,
+  isAdmin:          u.isAdmin,
+  isBanned:         u.isBanned,
+  isPremium:        u.isPremium,
+  wallet:           u.wallet,
+  cryptoWallets:    u.cryptoWallets,
+  stats:            u.stats,
+  badges:           u.badges,
+  referralCode:     u.referralCode,
   referralEarnings: u.referralEarnings,
-  createdAt: u.createdAt,
-   isAdmin: u.isAdmin, 
+  createdAt:        u.createdAt,
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 📝 REGISTER
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password, phone, referralCode } = req.body;
@@ -41,92 +43,103 @@ router.post('/register', async (req, res) => {
     }
 
     const existing = await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { username }]
+      $or: [{ email: email.toLowerCase() }, { username }],
     });
-
     if (existing) {
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
-    // Referral
+    // Referral check
     let referrer = null;
     if (referralCode) {
       referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    // ✅ Plain password do — User.js pre-save hook hash karega
+    // ❌ Yahan bcrypt.hash mat karo — double hashing hoga
     const user = await User.create({
       username,
-      email: email.toLowerCase(),
-      password: hashedPassword,
+      email:    email.toLowerCase().trim(),
+      password,                              // ← plain password
       phone,
-
       wallet: {
-        coins: 1000,
+        coins:       referrer ? 1200 : 1000, // referral bonus
         realBalance: 0,
       },
-
       cryptoWallets: {
-        TRC20: null,
-        BEP20: null,
+        trc20: '',   // ← lowercase, matches User model
+        bep20: '',
       },
-
-      referralCode: Math.random().toString(36).substr(2, 8).toUpperCase(),
       referredBy: referrer?.username || null,
     });
 
-    // Referral bonus
+    // Referral bonus to referrer
     if (referrer) {
       referrer.wallet.coins += 200;
       await referrer.save();
 
-      user.wallet.coins += 200;
-      await user.save();
+      await Transaction.create({
+        userId:      referrer._id,
+        type:        'referral',
+        amount:      200,
+        currency:    'coins',
+        status:      'completed',
+        description: `Referral bonus — ${username} joined`,
+        balanceBefore: referrer.wallet.coins - 200,
+        balanceAfter:  referrer.wallet.coins,
+      });
     }
 
     // Welcome transaction
     await Transaction.create({
-      userId: user._id,
-      type: 'bonus',
-      amount: 1000,
-      currency: 'coins',
-      status: 'completed',
-      description: 'Welcome bonus',
+      userId:      user._id,
+      type:        'bonus',
+      amount:      1000,
+      currency:    'coins',
+      status:      'completed',
+      description: 'Welcome bonus 🎉',
       balanceBefore: 0,
-      balanceAfter: user.wallet.coins,
+      balanceAfter:  user.wallet.coins,
     });
 
     const token = generateToken(user._id);
 
-    res.json({
+    res.status(201).json({
       success: true,
       token,
       user: sanitizeUser(user),
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    console.error('REGISTER ERROR:', err);
+    res.status(500).json({ success: false, message: 'Registration failed' });
   }
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 🔐 LOGIN
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.json({ success: false, message: 'Invalid credentials' });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    const match = await bcrypt.compare(password, user.password);
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({ success: false, message: `Account suspended: ${user.banReason || 'Contact support'}` });
+    }
+
+    // ✅ comparePassword method use karo (User model mein defined hai)
+    const match = await user.comparePassword(password);
     if (!match) {
-      return res.json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ success: false, message: 'Invalid credentials' });
     }
 
     const token = generateToken(user._id);
@@ -138,54 +151,17 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ success: false });
+    console.error('LOGIN ERROR:', err);
+    res.status(500).json({ success: false, message: 'Login failed' });
   }
 });
 
-
-
-
-
-// router.post('/login', async (req, res) => {
-//   try {
-//     console.log("LOGIN BODY:", req.body); // 🔥
-
-//     const { email, password } = req.body;
-
-//     const user = await User.findOne({ email: email.toLowerCase() });
-//     console.log("USER FOUND:", user); // 🔥
-
-//     if (!user) {
-//       return res.json({ success: false, message: 'Invalid credentials' });
-//     }
-
-//     const match = await bcrypt.compare(password, user.password);
-//     console.log("PASSWORD MATCH:", match); // 🔥
-
-//     if (!match) {
-//       return res.json({ success: false, message: 'Invalid credentials' });
-//     }
-
-//     const token = generateToken(user._id);
-
-//     res.json({
-//       success: true,
-//       token,
-//       user: sanitizeUser(user),
-//     });
-
-//   } catch (err) {
-//     console.error("LOGIN ERROR:", err); // 🔥
-//     res.status(500).json({ success: false });
-//   }
-// });
-
-
-// ═══════════════════════════════════════════════
-// 👤 GET PROFILE
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// 👤 GET PROFILE  — /api/auth/me
+// ══════════════════════════════════════════════════════════
 router.get('/me', auth, async (req, res) => {
   try {
+    // req.user already set by auth middleware
     res.json({
       success: true,
       user: sanitizeUser(req.user),
@@ -195,115 +171,94 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // ✏️ UPDATE PROFILE
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.put('/profile', auth, async (req, res) => {
   try {
     const { username, phone, avatar } = req.body;
-
     const update = {};
-
     if (username) update.username = username;
-    if (phone) update.phone = phone;
-    if (avatar) update.avatar = avatar;
+    if (phone)    update.phone    = phone;
+    if (avatar)   update.avatar   = avatar;
 
-    const user = await User.findByIdAndUpdate(req.user._id, update, {
-      new: true
-    });
-
-    res.json({
-      success: true,
-      user: sanitizeUser(user),
-    });
-
+    const user = await User.findByIdAndUpdate(req.user._id, update, { new: true });
+    res.json({ success: true, user: sanitizeUser(user) });
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 🔑 CHANGE PASSWORD
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.post('/change-password', auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    const user = await User.findById(req.user._id);
-
-    const match = await bcrypt.compare(currentPassword, user.password);
+    const user  = await User.findById(req.user._id);
+    const match = await user.comparePassword(currentPassword);
     if (!match) {
-      return res.json({ success: false, message: 'Wrong password' });
+      return res.status(400).json({ success: false, message: 'Wrong current password' });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    // ✅ Plain password assign karo — pre-save hook hash karega
+    user.password = newPassword;
     await user.save();
 
     res.json({ success: true, message: 'Password updated' });
-
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
 
-
-// ═══════════════════════════════════════════════
-// 💼 ADD USER WALLET (TRC20 / BEP20)
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// 💼 ADD / UPDATE CRYPTO WALLET
+// ══════════════════════════════════════════════════════════
 router.post('/add-wallet', auth, async (req, res) => {
   try {
     const { address, network } = req.body;
 
     if (!address || !network) {
-      return res.json({ success: false, message: 'Address & network required' });
+      return res.status(400).json({ success: false, message: 'Address & network required' });
     }
-
     if (!['TRC20', 'BEP20'].includes(network)) {
-      return res.json({ success: false, message: 'Invalid network' });
+      return res.status(400).json({ success: false, message: 'Invalid network' });
     }
 
     const user = await User.findById(req.user._id);
 
-    user.cryptoWallets[network] = address;
+    // ✅ lowercase keys — matches User model (trc20/bep20)
+    const key = network === 'TRC20' ? 'trc20' : 'bep20';
+    user.cryptoWallets[key] = address;
     await user.save();
 
     res.json({
       success: true,
       message: `${network} wallet saved`,
-      wallets: user.cryptoWallets
+      wallets: user.cryptoWallets,
     });
-
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 👁️ GET USER WALLETS
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.get('/wallets', auth, async (req, res) => {
   try {
-    res.json({
-      success: true,
-      wallets: req.user.cryptoWallets
-    });
+    res.json({ success: true, wallets: req.user.cryptoWallets });
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
 
-
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // 🚪 LOGOUT
-// ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 router.post('/logout', auth, (req, res) => {
-  res.json({
-    success: true,
-    message: 'Logged out'
-  });
+  res.json({ success: true, message: 'Logged out' });
 });
 
 module.exports = router;
