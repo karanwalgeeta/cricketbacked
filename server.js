@@ -21,13 +21,6 @@ const app    = express();
 const server = http.createServer(app);
 
 // ── Allowed Origins (FIXED CORS 🔥) ────────────────────────
-// const allowedOrigins = [
-//   "http://localhost:5173",
-//   "http://localhost:3000",
-//   process.env.CLIENT_URL
-// ];
-
-
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -38,48 +31,48 @@ const allowedOrigins = [
 ];
 
 // ── Socket.IO setup ────────────────────────────────────────
-// const io = socketIo(server, {
-//   cors: {
-//     origin: allowedOrigins,
-//     methods: ["GET", "POST"],
-//     credentials: true,
-//   },
-// });
-
-
 const io = socketIo(server, {
   cors: {
-    origin:      process.env.CLIENT_URL || 'http://localhost:3000',
-    methods:     ['GET', 'POST'],
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
 
-// ── Middleware ─────────────────────────────────────────────
-// app.use(cors({
-//   origin: function (origin, callback) {
-//     if (!origin || allowedOrigins.includes(origin)) {
-//       callback(null, true);
-//     } else {
-//       callback(new Error("CORS not allowed"));
-//     }
+// const io = socketIo(server, {
+//   cors: {
+//     origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+//     methods:     ['GET', 'POST'],
+//     credentials: true,
 //   },
-//   credentials: true,
-// }));
+// });
 
 
-// app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
-
-
-
+// ── Middleware ─────────────────────────────────────────────
 app.use(cors({
-  origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
   credentials: true,
 }));
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+
+
+// app.use(cors({
+//   origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+//   credentials: true,
+// }));
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
 
 
 
