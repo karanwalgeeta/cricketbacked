@@ -1,5 +1,4 @@
 
-
 require('dotenv').config();
 const express   = require('express');
 const http      = require('http');
@@ -27,6 +26,7 @@ const allowedOrigins = [
   "http://localhost:5175",
   "http://localhost:5176",
   "http://localhost:3000",
+  "https://frontendcrick.onrender.com",
   process.env.CLIENT_URL
 ];
 
